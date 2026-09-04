@@ -272,6 +272,7 @@ static esp_err_t set_camera_safe_state(candis_power_context_t *context)
     return ret;
 }
 #define CANDIS_PIN_COUNT(a) (sizeof(a) / sizeof((a)[0]))
+#define CANDIS_TOUCH_RESET_GPIO GPIO_NUM_17
 
 /* Park peripheral signal pins as pure inputs before their rail is switched
  * off, so a pad left driving high cannot back-feed the sinking rail through
@@ -476,6 +477,45 @@ static int board_power_set_camera(candis_power_context_t *context, bool power_on
     return ret;
 }
 
+static int board_power_set_touch(candis_power_context_t *context, bool power_on)
+{
+    if (!power_on) {
+        esp_err_t ret = gpio_reset_pin(CANDIS_TOUCH_RESET_GPIO);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        return set_regulator(context->pmic, TG28_SW_ALDO2, 3300, false);
+    }
+
+    esp_err_t ret = set_regulator(context->pmic, TG28_SW_ALDO2, 3300, true);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    /* Board Manager probes the configured I2C address before constructing the
+     * CST820 driver. Wake the freshly powered controller first; the driver
+     * repeats this reset after the probe when it takes ownership of the pin. */
+    const gpio_config_t reset_config = {
+        .pin_bit_mask = 1ULL << CANDIS_TOUCH_RESET_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ret = gpio_config(&reset_config);
+    if (ret == ESP_OK) {
+        ret = gpio_set_level(CANDIS_TOUCH_RESET_GPIO, 0);
+    }
+    if (ret == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(5) + 1);
+        ret = gpio_set_level(CANDIS_TOUCH_RESET_GPIO, 1);
+    }
+    if (ret == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(100) + 1);
+    }
+    return ret;
+}
+
 static int board_power_set(void *context, const char *device_name, bool power_on)
 {
     candis_power_context_t *power = context;
@@ -486,11 +526,7 @@ static int board_power_set(void *context, const char *device_name, bool power_on
         return board_power_set_display(power, power_on);
     }
     if (strcmp(device_name, "lcd_touch") == 0) {
-        int ret = set_regulator(power->pmic, TG28_SW_ALDO2, 3300, power_on);
-        if (ret == ESP_OK && power_on) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-        return ret;
+        return board_power_set_touch(power, power_on);
     }
     if (strcmp(device_name, "audio_dac") == 0 || strcmp(device_name, "audio_adc") == 0) {
         return board_power_set_audio(power, device_name, power_on);
