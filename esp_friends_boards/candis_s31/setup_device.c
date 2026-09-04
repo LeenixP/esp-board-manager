@@ -49,12 +49,12 @@ static const co5300_lcd_init_cmd_t s_panel_init[] = {
     {0x3A, (uint8_t[]) {0x55}, 1, 0},
     {0x35, (uint8_t[]) {0x00}, 1, 0},
     {0x53, (uint8_t[]) {0x20}, 1, 0},
-    /* First backlight at 0x4C (about 30 percent), matching
-     * CO5300_FIRST_BRIGHTNESS_HW in the BSP: full-scale first light
-     * violates the panel bring-up limit. 0x63 (WRHBMDISBV) stays at
-     * 0xFF because it only applies in HBM mode, which this board never
-     * enables. */
-    {0x51, (uint8_t[]) {0x4C}, 1, 0},
+    /* Keep the panel optically dark until the first application frame replaces
+     * unknown GRAM. The display is installed upside down, so the YAML mirror
+     * flags and this shared factory path must stay in agreement.
+     * 0x63 (WRHBMDISBV) stays at 0xFF because it only applies in HBM mode,
+     * which this board never enables. */
+    {0x51, (uint8_t[]) {0x00}, 1, 0},
     {0x63, (uint8_t[]) {0xFF}, 1, 0},
     {0x2A, (uint8_t[]) {0x00, 0x0A, 0x01, 0xD5}, 4, 0},
     {0x2B, (uint8_t[]) {0x00, 0x00, 0x01, 0xCB}, 4, 0},
